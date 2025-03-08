@@ -1,7 +1,16 @@
 from typing import Dict, List, Literal, Optional, Union
-from openai import AsyncOpenAI
+
+from openai import (
+    APIError,
+    AsyncOpenAI,
+    AuthenticationError,
+    OpenAIError,
+    RateLimitError,
+)
 from tenacity import retry, stop_after_attempt, wait_random_exponential
+
 from app.schema import Message
+
 
 class LLM:
     _instances: Dict[str, "LLM"] = {}
@@ -71,40 +80,78 @@ class LLM:
         wait=wait_random_exponential(min=1, max=60),
         stop=stop_after_attempt(6),
     )
-    def ask(
+    async def ask(
         self,
         messages: List[Union[dict, Message]],
         system_msgs: Optional[List[Union[dict, Message]]] = None,
+        stream: bool = True,
         temperature: Optional[float] = None,
     ) -> str:
-        # Format system and user messages
-        if system_msgs:
-            system_msgs = self.format_messages(system_msgs)
-            messages = system_msgs + self.format_messages(messages)
-        else:
-            messages = self.format_messages(messages)
+        """
+        Send a prompt to the LLM and get the response.
 
-        # Streaming request
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=self.max_tokens,
-            temperature=temperature or self.temperature,
-            stream=True,
-        )
+        Args:
+            messages: List of conversation messages
+            system_msgs: Optional system messages to prepend
+            stream (bool): Whether to stream the response
+            temperature (float): Sampling temperature for the response
 
-        collected_messages = []
-        for chunk in response:
-            chunk_message = chunk.choices[0].delta.content or ""
-            collected_messages.append(chunk_message)
-            print(chunk_message, end="", flush=True)
+        Returns:
+            str: The generated response
 
-        print()  # Newline after streaming
-        full_response = "".join(collected_messages).strip()
-        if not full_response:
-            raise ValueError("Empty response from streaming LLM")
-        return full_response
+        Raises:
+            ValueError: If messages are invalid or response is empty
+            OpenAIError: If API call fails after retries
+            Exception: For unexpected errors
+        """
+        try:
+            # Format system and user messages
+            if system_msgs:
+                system_msgs = self.format_messages(system_msgs)
+                messages = system_msgs + self.format_messages(messages)
+            else:
+                messages = self.format_messages(messages)
 
+            if not stream:
+                # Non-streaming request
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=self.max_tokens,
+                    temperature=temperature or self.temperature,
+                    stream=False,
+                )
+                if not response.choices or not response.choices[0].message.content:
+                    raise ValueError("Empty or invalid response from LLM")
+                return response.choices[0].message.content
+
+            # Streaming request
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=temperature or self.temperature,
+                stream=True,
+            )
+
+            collected_messages = []
+            async for chunk in response:
+                chunk_message = chunk.choices[0].delta.content or ""
+                collected_messages.append(chunk_message)
+                print(chunk_message, end="", flush=True)
+
+            print()  # Newline after streaming
+            full_response = "".join(collected_messages).strip()
+            if not full_response:
+                raise ValueError("Empty response from streaming LLM")
+            return full_response
+
+        except ValueError as ve:
+            raise
+        except OpenAIError as oe:
+            raise
+        except Exception as e:
+            raise
 
     @retry(
         wait=wait_random_exponential(min=1, max=60),
@@ -120,34 +167,66 @@ class LLM:
         temperature: Optional[float] = None,
         **kwargs,
     ):
-        # Validate tool_choice
-        if tool_choice not in ["none", "auto", "required"]:
-            raise ValueError(f"Invalid tool_choice: {tool_choice}")
+        """
+        Ask LLM using functions/tools and return the response.
 
-        # Format messages
-        if system_msgs:
-            system_msgs = self.format_messages(system_msgs)
-            messages = system_msgs + self.format_messages(messages)
-        else:
-            messages = self.format_messages(messages)
+        Args:
+            messages: List of conversation messages
+            system_msgs: Optional system messages to prepend
+            timeout: Request timeout in seconds
+            tools: List of tools to use
+            tool_choice: Tool choice strategy
+            temperature: Sampling temperature for the response
+            **kwargs: Additional completion arguments
 
-        # Set up the completion request
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature or self.temperature,
-            max_tokens=self.max_tokens,
-            tools=tools,
-            tool_choice=tool_choice,
-            timeout=timeout,
-            **kwargs,
-        )
+        Returns:
+            ChatCompletionMessage: The model's response
 
-        # Check if response is valid
-        if not response.choices or not response.choices[0].message:
-            print(response)
-            raise ValueError("Invalid or empty response from LLM")
+        Raises:
+            ValueError: If tools, tool_choice, or messages are invalid
+            OpenAIError: If API call fails after retries
+            Exception: For unexpected errors
+        """
+        try:
+            # Validate tool_choice
+            if tool_choice not in ["none", "auto", "required"]:
+                raise ValueError(f"Invalid tool_choice: {tool_choice}")
 
-        return response.choices[0].message
+            # Format messages
+            if system_msgs:
+                system_msgs = self.format_messages(system_msgs)
+                messages = system_msgs + self.format_messages(messages)
+            else:
+                messages = self.format_messages(messages)
 
- 
+            # Validate tools if provided
+            if tools:
+                for tool in tools:
+                    if not isinstance(tool, dict) or "type" not in tool:
+                        raise ValueError("Each tool must be a dict with 'type' field")
+
+            # Set up the completion request
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature or self.temperature,
+                max_tokens=self.max_tokens,
+                tools=tools,
+                tool_choice=tool_choice,
+                timeout=timeout,
+                **kwargs,
+            )
+
+            # Check if response is valid
+            if not response.choices or not response.choices[0].message:
+                print(response)
+                raise ValueError("Invalid or empty response from LLM")
+
+            return response.choices[0].message
+
+        except ValueError as ve:
+            raise
+        except OpenAIError as oe:
+            raise
+        except Exception as e:
+            raise
