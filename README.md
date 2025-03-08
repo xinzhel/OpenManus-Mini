@@ -27,6 +27,8 @@ pip install -r requirements.txt
 ## Quick Start
 Run the [jupyter notebook](openmanus_mini.ipynb) to play with OpenManus-Mini!
 
+Note: Bugs may exist, the fully tested code is expected to be released tomorrow.
+
 ## Acknowledgement
 
 Thanks to [OpenManus](https://github.com/mannaandpoem/OpenManus), [anthropic-computer-use](https://github.com/anthropics/anthropic-quickstarts/tree/main/computer-use-demo) and [broswer-use](https://github.com/browser-use/browser-use) for providing basic support for this project!
