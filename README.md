@@ -1,6 +1,8 @@
 # OpenManus-Mini (Implementing Manus in <250 lines of code) 🙋
-[OpenManus](https://github.com/mannaandpoem/OpenManus) is clean, but OpenMinus-Mini is minimal for educational purposes 🛫!
+This is a minimal [OpenManus](https://github.com/mannaandpoem/OpenManus) for self-learning purposes 🛫!
 The code in the `app` repository is copied from the original [OpenManus](https://github.com/mannaandpoem/OpenManus), including the basic definitions tools, llm (simplified) and prompts. The core function code is in the `openmanus_mini.py` file, containing only 250 lines of code.
+
+Note: Unfinished personal exploration. Bugs may exist, the fully tested code may (or may not) be released.
 
 
 ## Installation
@@ -26,8 +28,6 @@ pip install -r requirements.txt
 
 ## Quick Start
 Run the [jupyter notebook](openmanus_mini.ipynb) to play with OpenManus-Mini!
-
-Note: Bugs may exist, the fully tested code is expected to be released tomorrow.
 
 ## Acknowledgement
 
