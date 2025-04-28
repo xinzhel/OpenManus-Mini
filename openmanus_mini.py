@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 from typing import List, Literal, Optional
 import json
 from pydantic import Field
-from pydantic import BaseModel, Field
 from app.llm import LLM
 from app.schema import AgentState, Memory, Message, ToolCall
 from app.tool import Terminate, ToolCollection, BrowserUseTool, FileSaver, GoogleSearch, PythonExecute
